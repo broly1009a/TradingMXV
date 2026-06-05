@@ -126,4 +126,10 @@ for(const part of parts){
         currentEntryType = value; // Cập nhật loại entry hiện tại
         currentPos = null; // Đặt lại vị trí khi gặp entry mới
         currentPx = null; // Đặt lại giá hiện tại khi gặp entry mới
+    } else if(key === '290'){ // Tag 290 chứa khối lượng của entry
+        currentPos = value; // Cập nhật khối lượng hiện tại
+    } else if(key === '270'){ // Tag 270 chứa giá của entry
+        const px = parseFloat(value); // Chuyển đổi giá thành số
+        currentPx = px; // Cập nhật giá hiện tại
+        if(currentEntryType === '0' && (currentPos === '1'|| currentPos === null ) && bid === null){ // Nếu là entry bid và chưa có giá bid nào, cập nhật giá bid
   }
