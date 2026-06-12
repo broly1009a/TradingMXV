@@ -1,0 +1,273 @@
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { InjectModel } from '@nestjs/mongoose';
+import { Model, Types } from 'mongoose';
+import { ShiftLog } from '../../schemas/shift-log.schema';
+import { ChecklistTemplate } from '../../schemas/template.schema';
+import { AuditLog } from '../../schemas/audit-log.schema';
+import { ShiftsGateway } from './shifts.gateway';
+
+@Injectable()
+export class ShiftsService {
+  constructor(
+    @InjectModel(ShiftLog.name) private readonly shiftLogModel: Model<ShiftLog>,
+    @InjectModel(ChecklistTemplate.name) private readonly templateModel: Model<ChecklistTemplate>,
+    @InjectModel(AuditLog.name) private readonly auditLogModel: Model<AuditLog>,
+    private readonly shiftsGateway: ShiftsGateway,
+  ) {}
+
+  async initializeShift(templateId: string, userId: string, shiftDateInput?: string): Promise<ShiftLog> {
+    const template = await this.templateModel.findById(templateId).exec();
+    if (!template) {
+      throw new NotFoundException('Mẫu checklist không tồn tại');
+    }
+
+    // Default shift date is current date in Vietnam time (GMT+7)
+    let shiftDate = shiftDateInput;
+    if (!shiftDate) {
+      const now = new Date();
+      // Adjust to UTC+7 timezone
+      const vietnamTime = new Date(now.getTime() + 7 * 60 * 60 * 1000);
+      shiftDate = vietnamTime.toISOString().split('T')[0];
+    }
+
+    // Check if an active (PENDING) shift log already exists for this template and date
+    const existingLog = await this.shiftLogModel
+      .findOne({ templateId: new Types.ObjectId(templateId), shiftDate, status: 'PENDING' })
+      .populate('userId', 'fullName username')
+      .populate({
+        path: 'templateId',
+        populate: { path: 'departmentId' }
+      })
+      .exec();
+
+    if (existingLog) {
+      return existingLog; // Return existing PENDING log if already initialized and active
+    }
+
+    // Create snapshotted details
+    const details = template.tasks.map(task => ({
+      taskId: task.taskId,
+      taskNameSnapshot: task.taskName,
+      prioritySnapshot: task.priority,
+      isChecked: false,
+      checkedAt: null,
+      updatedBy: null,
+      note: null,
+    }));
+
+    const newLog = new this.shiftLogModel({
+      templateId: new Types.ObjectId(templateId),
+      userId: new Types.ObjectId(userId),
+      shiftDate,
+      status: 'PENDING',
+      progressPercentage: 0.00,
+      details,
+    });
+
+    const saved = await newLog.save();
+    const result = await this.shiftLogModel.findById(saved._id)
+      .populate('userId', 'fullName username')
+      .populate({
+        path: 'templateId',
+        populate: { path: 'departmentId' }
+      })
+      .exec();
+    if (!result) {
+      throw new NotFoundException('Lỗi khởi tạo ca trực');
+    }
+    return result;
+  }
+
+  async toggleTask(shiftLogId: string, taskId: string, isChecked: boolean, userId: string, note?: string): Promise<ShiftLog> {
+    const log = await this.shiftLogModel.findById(shiftLogId).exec();
+    if (!log) {
+      throw new NotFoundException('Không tìm thấy ca trực');
+    }
+
+    if (log.status === 'COMPLETED') {
+      throw new BadRequestException('Ca trực đã được chốt, không thể thay đổi dữ liệu');
+    }
+
+    const task = log.details.find(d => d.taskId === taskId);
+    if (!task) {
+      throw new NotFoundException('Không tìm thấy tác vụ tương ứng trong ca trực');
+    }
+
+    const oldIsChecked = task.isChecked;
+    const oldNote = task.note;
+
+    task.isChecked = isChecked;
+    task.checkedAt = isChecked ? new Date() : null;
+    task.updatedBy = new Types.ObjectId(userId) as any;
+    if (note !== undefined) {
+      task.note = note || null;
+    }
+
+    // Recalculate progress safely
+    const total = log.details.length;
+    const completed = log.details.filter(d => d.isChecked).length;
+    log.progressPercentage = total > 0 ? parseFloat(((completed / total) * 100).toFixed(2)) : 0.00;
+
+    await log.save();
+
+    const result = await this.shiftLogModel.findById(log._id)
+      .populate('userId', 'fullName username')
+      .populate('details.updatedBy', 'fullName username')
+      .populate({
+        path: 'templateId',
+        populate: { path: 'departmentId' }
+      })
+      .exec();
+    if (!result) {
+      throw new NotFoundException('Không tìm thấy ca trực sau cập nhật');
+    }
+
+    // Create Audit Logs
+    let auditLogRecord: any = null;
+    if (oldIsChecked !== isChecked) {
+      const audit = new this.auditLogModel({
+        shiftLogId: new Types.ObjectId(shiftLogId),
+        taskId,
+        taskName: task.taskNameSnapshot,
+        userId: new Types.ObjectId(userId),
+        action: isChecked ? 'CHECK' : 'UNCHECK',
+        details: isChecked ? 'Tích hoàn thành tác vụ' : 'Hủy hoàn thành tác vụ',
+      });
+      const saved = await audit.save();
+      auditLogRecord = await this.auditLogModel.findById(saved._id).populate('userId', 'fullName username').exec();
+    }
+
+    if (note !== undefined && oldNote !== note) {
+      const noteAudit = new this.auditLogModel({
+        shiftLogId: new Types.ObjectId(shiftLogId),
+        taskId,
+        taskName: task.taskNameSnapshot,
+        userId: new Types.ObjectId(userId),
+        action: 'NOTE_UPDATE',
+        details: `Cập nhật ghi chú: "${note || ''}" (Ghi chú cũ: "${oldNote || ''}")`,
+      });
+      const saved = await noteAudit.save();
+      // If we already logged a check/uncheck, keep check/uncheck as primary to push, or push this
+      if (!auditLogRecord) {
+        auditLogRecord = await this.auditLogModel.findById(saved._id).populate('userId', 'fullName username').exec();
+      }
+    }
+
+    // Notify Gateway
+    this.shiftsGateway.notifyShiftUpdate(shiftLogId, result, auditLogRecord);
+
+    return result;
+  }
+
+  async closeShift(shiftLogId: string): Promise<ShiftLog> {
+    const log = await this.shiftLogModel.findById(shiftLogId).exec();
+    if (!log) {
+      throw new NotFoundException('Không tìm thấy ca trực');
+    }
+
+    log.status = 'COMPLETED';
+    await log.save();
+
+    const result = await this.shiftLogModel.findById(log._id)
+      .populate('userId', 'fullName username')
+      .populate('details.updatedBy', 'fullName username')
+      .populate({
+        path: 'templateId',
+        populate: { path: 'departmentId' }
+      })
+      .exec();
+    if (!result) {
+      throw new NotFoundException('Không tìm thấy ca trực sau khi đóng');
+    }
+
+    // Notify Gateway of final closure
+    this.shiftsGateway.notifyShiftUpdate(shiftLogId, result);
+
+    return result;
+  }
+
+  async getHistory(departmentId?: string, startDate?: string, endDate?: string, status?: string): Promise<ShiftLog[]> {
+    const filter: any = {};
+
+    if (status) {
+      filter.status = status;
+    }
+
+    if (startDate || endDate) {
+      filter.shiftDate = {};
+      if (startDate) {
+        filter.shiftDate.$gte = startDate;
+      }
+      if (endDate) {
+        filter.shiftDate.$lte = endDate;
+      }
+    }
+
+    // If departmentId is specified, we must find the templates of that department first
+    if (departmentId && Types.ObjectId.isValid(departmentId)) {
+      const templates = await this.templateModel.find({ departmentId: new Types.ObjectId(departmentId) }).exec();
+      const templateIds = templates.map(t => t._id);
+      filter.templateId = { $in: templateIds };
+    }
+
+    return this.shiftLogModel.find(filter)
+      .populate('userId', 'fullName username')
+      .populate('details.updatedBy', 'fullName username')
+      .populate({
+        path: 'templateId',
+        populate: { path: 'departmentId' }
+      })
+      .sort({ shiftDate: -1, createdAt: -1 })
+      .exec();
+  }
+
+  async getActiveShiftsByDepartment(departmentId?: string, shiftDate?: string): Promise<ShiftLog[]> {
+    const targetDate = shiftDate || new Date(new Date().getTime() + 7 * 60 * 60 * 1000).toISOString().split('T')[0];
+    
+    const filter: any = { shiftDate: targetDate };
+
+    if (departmentId && Types.ObjectId.isValid(departmentId)) {
+      // Find all templates for this department
+      const templates = await this.templateModel.find({ departmentId: new Types.ObjectId(departmentId) }).exec();
+      const templateIds = templates.map(t => t._id);
+      filter.templateId = { $in: templateIds };
+    }
+
+    return this.shiftLogModel.find(filter)
+      .populate('userId', 'fullName username')
+      .populate('details.updatedBy', 'fullName username')
+      .populate({
+        path: 'templateId',
+        populate: { path: 'departmentId' }
+      })
+      .exec();
+  }
+
+  async getShiftById(id: string): Promise<ShiftLog> {
+    if (!Types.ObjectId.isValid(id)) {
+      throw new BadRequestException('ID ca trực không hợp lệ');
+    }
+    const log = await this.shiftLogModel.findById(id)
+      .populate('userId', 'fullName username')
+      .populate('details.updatedBy', 'fullName username')
+      .populate({
+        path: 'templateId',
+        populate: { path: 'departmentId' }
+      })
+      .exec();
+    if (!log) {
+      throw new NotFoundException('Không tìm thấy ca trực');
+    }
+    return log;
+  }
+
+  async getAuditLogs(shiftLogId: string): Promise<AuditLog[]> {
+    if (!Types.ObjectId.isValid(shiftLogId)) {
+      throw new BadRequestException('ID ca trực không hợp lệ');
+    }
+    return this.auditLogModel.find({ shiftLogId: new Types.ObjectId(shiftLogId) })
+      .populate('userId', 'fullName username')
+      .sort({ createdAt: -1 })
+      .exec();
+  }
+}
