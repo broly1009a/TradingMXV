@@ -35,6 +35,7 @@ interface TaskDetail {
     username: string;
   };
   note?: string;
+  deadlineSnapshot?: string;
 }
 
 interface ShiftLog {
@@ -660,6 +661,21 @@ function ChecklistWorksheet() {
                           </p>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginTop: '8px', flexWrap: 'wrap' }}>
                             {getPriorityBadge(item.prioritySnapshot)}
+                            {item.deadlineSnapshot && (
+                              <span style={{ 
+                                fontSize: '0.75rem', 
+                                color: '#ef4444', 
+                                display: 'inline-flex', 
+                                alignItems: 'center', 
+                                gap: '4px', 
+                                background: 'rgba(239, 68, 68, 0.1)', 
+                                padding: '2px 8px', 
+                                borderRadius: '4px', 
+                                fontWeight: 600 
+                              }}>
+                                <Clock size={12} /> Hạn chót: {item.deadlineSnapshot}
+                              </span>
+                            )}
                             {item.isChecked && (
                               <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
                                 <Clock size={12} /> Đã kiểm: {item.checkedAt ? new Date(item.checkedAt).toLocaleTimeString('vi-VN') : ''}
@@ -801,9 +817,10 @@ function ChecklistWorksheet() {
           <thead>
             <tr>
               <th style={{ width: '40px' }}>STT</th>
-              <th style={{ width: '120px' }}>Mã Tác Vụ</th>
+              <th style={{ width: '100px' }}>Mã Tác Vụ</th>
               <th>Nội Dung Tác Vụ</th>
               <th style={{ width: '80px' }}>Ưu Tiên</th>
+              <th style={{ width: '80px' }}>Hạn Chót</th>
               <th style={{ width: '90px' }}>Trạng Thái</th>
               <th style={{ width: '120px' }}>Thời Gian Kiểm</th>
               <th>Ghi Chú</th>
@@ -821,6 +838,7 @@ function ChecklistWorksheet() {
                   {item.prioritySnapshot === 'HIGH' && 'Cao'}
                   {item.prioritySnapshot === 'CRITICAL' && 'Khẩn Cấp'}
                 </td>
+                <td style={{ textAlign: 'center' }}>{item.deadlineSnapshot || '-'}</td>
                 <td style={{ textAlign: 'center', fontWeight: item.isChecked ? 'bold' : 'normal' }}>
                   {item.isChecked ? 'ĐÃ KIỂM' : 'CHƯA KIỂM'}
                 </td>

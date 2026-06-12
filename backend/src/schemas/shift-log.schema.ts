@@ -23,6 +23,9 @@ export class ShiftLogDetail {
 
   @Prop({ type: String, default: null })
   note?: string | null;
+
+  @Prop({ required: false, type: String, default: null })
+  deadlineSnapshot?: string | null;
 }
 
 export const ShiftLogDetailSchema = SchemaFactory.createForClass(ShiftLogDetail);

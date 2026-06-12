@@ -14,6 +14,9 @@ export class TaskItem {
 
   @Prop({ required: true, type: Number })
   sortOrder: number;
+
+  @Prop({ required: false, type: String })
+  deadline?: string;
 }
 
 export const TaskItemSchema = SchemaFactory.createForClass(TaskItem);

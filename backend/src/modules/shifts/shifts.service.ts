@@ -5,6 +5,7 @@ import { ShiftLog } from '../../schemas/shift-log.schema';
 import { ChecklistTemplate } from '../../schemas/template.schema';
 import { AuditLog } from '../../schemas/audit-log.schema';
 import { ShiftsGateway } from './shifts.gateway';
+import { TelegramService } from '../telegram/telegram.service';
 
 @Injectable()
 export class ShiftsService {
@@ -13,6 +14,7 @@ export class ShiftsService {
     @InjectModel(ChecklistTemplate.name) private readonly templateModel: Model<ChecklistTemplate>,
     @InjectModel(AuditLog.name) private readonly auditLogModel: Model<AuditLog>,
     private readonly shiftsGateway: ShiftsGateway,
+    private readonly telegramService: TelegramService,
   ) {}
 
   async initializeShift(templateId: string, userId: string, shiftDateInput?: string): Promise<ShiftLog> {
@@ -49,6 +51,7 @@ export class ShiftsService {
       taskId: task.taskId,
       taskNameSnapshot: task.taskName,
       prioritySnapshot: task.priority,
+      deadlineSnapshot: task.deadline || null,
       isChecked: false,
       checkedAt: null,
       updatedBy: null,
@@ -75,6 +78,17 @@ export class ShiftsService {
     if (!result) {
       throw new NotFoundException('Lỗi khởi tạo ca trực');
     }
+
+    // Gửi thông báo Telegram khi khởi tạo ca trực
+    const deptName = (result.templateId as any)?.departmentId?.name || 'Vận hành';
+    await this.telegramService.sendMessage(
+      `🔔 <b>[MXV KHỞI TẠO CA TRỰC]</b>\n` +
+      `• Ca trực: <b>${(result.templateId as any)?.title}</b>\n` +
+      `• Ngày trực: <b>${result.shiftDate}</b>\n` +
+      `• Phòng ban: <b>${deptName}</b>\n` +
+      `• Người trực chính: <b>${(result.userId as any)?.fullName}</b>`
+    );
+
     return result;
   }
 
@@ -156,6 +170,18 @@ export class ShiftsService {
     // Notify Gateway
     this.shiftsGateway.notifyShiftUpdate(shiftLogId, result, auditLogRecord);
 
+    // Bắn tin nhắn alert Telegram nếu tác vụ khẩn cấp (CRITICAL) vừa được hoàn thành
+    if (isChecked && !oldIsChecked && task.prioritySnapshot === 'CRITICAL') {
+      const userObj = result.details.find(d => d.taskId === taskId)?.updatedBy as any;
+      const actorName = userObj?.fullName || 'Nhân sự vận hành';
+      await this.telegramService.sendMessage(
+        `✅ <b>[TÁC VỤ KHẨN CẤP HOÀN THÀNH]</b>\n` +
+        `• Tác vụ: <b>${task.taskId} - ${task.taskNameSnapshot}</b>\n` +
+        `• Ca trực: <i>${(result.templateId as any)?.title || 'Ca vận hành'}</i>\n` +
+        `• Thực hiện bởi: <b>${actorName}</b>`
+      );
+    }
+
     return result;
   }
 
@@ -182,6 +208,17 @@ export class ShiftsService {
 
     // Notify Gateway of final closure
     this.shiftsGateway.notifyShiftUpdate(shiftLogId, result);
+
+    // Gửi thông báo Telegram báo cáo kết quả chốt ca
+    const completedCount = result.details.filter(d => d.isChecked).length;
+    const totalCount = result.details.length;
+    await this.telegramService.sendMessage(
+      `🔒 <b>[MXV CHỐT CA TRỰC]</b>\n` +
+      `• Ca trực: <b>${(result.templateId as any)?.title || 'Ca vận hành'}</b>\n` +
+      `• Ngày trực: <b>${result.shiftDate}</b>\n` +
+      `• Trạng thái: <b>ĐÃ HOÀN THÀNH & KHÓA SỔ</b>\n` +
+      `• Kết quả: <b>${completedCount}/${totalCount} tác vụ hoàn thành</b> (${result.progressPercentage}%)`
+    );
 
     return result;
   }

@@ -25,6 +25,7 @@ interface Task {
   taskName: string;
   priority: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
   sortOrder: number;
+  deadline?: string;
 }
 
 interface Template {
@@ -53,6 +54,7 @@ export default function AdminTemplatesPage() {
   const [newTaskId, setNewTaskId] = useState('');
   const [newTaskName, setNewTaskName] = useState('');
   const [newPriority, setNewPriority] = useState<'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL'>('MEDIUM');
+  const [newDeadline, setNewDeadline] = useState('');
   
   // Modal states for Template CRUD
   const [templateModalOpen, setTemplateModalOpen] = useState(false);
@@ -253,7 +255,8 @@ export default function AdminTemplatesPage() {
       taskId: newTaskId.trim(),
       taskName: newTaskName.trim(),
       priority: newPriority,
-      sortOrder: selectedTemplate.tasks.length + 1
+      sortOrder: selectedTemplate.tasks.length + 1,
+      deadline: newDeadline.trim() || undefined
     };
 
     const updatedTasks = [...selectedTemplate.tasks, newTask];
@@ -265,6 +268,7 @@ export default function AdminTemplatesPage() {
     setNewTaskId('');
     setNewTaskName('');
     setNewPriority('MEDIUM');
+    setNewDeadline('');
     setError('');
   };
 
@@ -471,7 +475,7 @@ export default function AdminTemplatesPage() {
                 <h4 style={{ fontSize: '0.95rem', fontWeight: 700, color: '#fff', marginBottom: '14px', display: 'flex', alignItems: 'center', gap: '6px' }}>
                   <Plus size={16} color="var(--color-primary)" /> Thêm tác vụ mới vào danh sách
                 </h4>
-                <div style={{ display: 'grid', gridTemplateColumns: '150px 1fr 150px 120px', gap: '12px', alignItems: 'end' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '120px 1fr 120px 100px 90px', gap: '12px', alignItems: 'end' }}>
                   <div>
                     <label style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '6px' }}>Mã Tác Vụ *</label>
                     <input
@@ -493,7 +497,7 @@ export default function AdminTemplatesPage() {
                     />
                   </div>
                   <div>
-                    <label style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '6px' }}>Mức Độ Ưu Tiên *</label>
+                    <label style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '6px' }}>Độ Ưu Tiên *</label>
                     <select
                       className="form-input"
                       value={newPriority}
@@ -501,10 +505,20 @@ export default function AdminTemplatesPage() {
                       style={{ background: 'var(--bg-app)' }}
                     >
                       <option value="LOW">THẤP</option>
-                      <option value="MEDIUM">TRUNG BÌNH</option>
+                      <option value="MEDIUM">T.BÌNH</option>
                       <option value="HIGH">CAO</option>
                       <option value="CRITICAL">KHẨN CẤP</option>
                     </select>
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '6px' }}>Hạn Chót</label>
+                    <input
+                      type="text"
+                      className="form-input"
+                      placeholder="vd: 16:30"
+                      value={newDeadline}
+                      onChange={(e) => setNewDeadline(e.target.value)}
+                    />
                   </div>
                   <button type="button" onClick={handleAddTask} className="btn btn-success" style={{ width: '100%', padding: '12px' }}>
                     <Plus size={16} /> Thêm
@@ -545,6 +559,12 @@ export default function AdminTemplatesPage() {
                               <span>Mã: <strong>{task.taskId}</strong></span>
                               <span>•</span>
                               <span>Ưu tiên: {getPriorityBadge(task.priority)}</span>
+                              {task.deadline && (
+                                <>
+                                  <span>•</span>
+                                  <span>Hạn chót: <strong style={{ color: '#ef4444' }}>{task.deadline}</strong></span>
+                                </>
+                              )}
                             </div>
                           </div>
                         </div>

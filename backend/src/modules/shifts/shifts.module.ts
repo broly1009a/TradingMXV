@@ -6,6 +6,7 @@ import { ShiftLog, ShiftLogSchema } from '../../schemas/shift-log.schema';
 import { ChecklistTemplate, ChecklistTemplateSchema } from '../../schemas/template.schema';
 import { AuditLog, AuditLogSchema } from '../../schemas/audit-log.schema';
 import { ShiftsGateway } from './shifts.gateway';
+import { TelegramService } from '../telegram/telegram.service';
 
 @Module({
   imports: [
@@ -15,8 +16,8 @@ import { ShiftsGateway } from './shifts.gateway';
       { name: AuditLog.name, schema: AuditLogSchema },
     ]),
   ],
-  providers: [ShiftsService, ShiftsGateway],
+  providers: [ShiftsService, ShiftsGateway, TelegramService],
   controllers: [ShiftsController],
-  exports: [ShiftsService],
+  exports: [ShiftsService, TelegramService],
 })
 export class ShiftsModule {}
