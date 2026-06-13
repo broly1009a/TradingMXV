@@ -467,8 +467,14 @@ function ChecklistWorksheet() {
             background: #fff !important;
             color: #000 !important;
           }
-          .no-print {
+          .sidebar, .no-print {
             display: none !important;
+          }
+          .main-content {
+            margin: 0 !important;
+            padding: 0 !important;
+            width: 100% !important;
+            max-width: 100% !important;
           }
           .print-only {
             display: block !important;
