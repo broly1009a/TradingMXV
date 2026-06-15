@@ -231,7 +231,7 @@ export default function AdminDepartmentsPage() {
             </div>
           ) : (
             <div style={{ overflowX: 'auto' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem', textAlign: 'left' }}>
+              <table style={{ width: '100%', minWidth: '700px', borderCollapse: 'collapse', fontSize: '0.9rem', textAlign: 'left' }}>
                 <thead>
                   <tr style={{ borderBottom: '1px solid var(--border-color)', color: 'var(--text-secondary)' }}>
                     <th style={{ padding: '12px 16px' }}>#</th>
@@ -295,20 +295,31 @@ export default function AdminDepartmentsPage() {
             </div>
           )}
         </div>
+      </div>
 
-        {/* Modal */}
-        {modalOpen && (
-          <div style={{
-            position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-            background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(8px)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            zIndex: 1000, padding: '20px'
-          }}>
-            <div className="glass-panel animate-fade-in" style={{
-              width: '100%', maxWidth: '460px',
-              background: '#0d1326', border: '1px solid rgba(255,255,255,0.08)',
-              borderRadius: '16px', padding: '32px',
-              display: 'flex', flexDirection: 'column', gap: '20px'
+      {/* Modal */}
+      {modalOpen && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0,0,0,0.6)',
+          backdropFilter: 'blur(8px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          overflowY: 'auto',
+          zIndex: 9999, // Đè lên tất cả
+          padding: '20px'
+        }}>
+          <div className="glass-panel" style={{
+            width: '100%', maxWidth: '460px',
+            background: '#0d1326', border: '1px solid rgba(255,255,255,0.08)',
+            borderRadius: '16px', padding: '32px',
+            display: 'flex', flexDirection: 'column', gap: '20px',
+            margin: 'auto' // Căn giữa thông minh và tránh bị cut-off khi màn hình nhỏ
             }}>
               {/* Modal Header */}
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -420,10 +431,9 @@ export default function AdminDepartmentsPage() {
                   </button>
                 </div>
               </form>
-            </div>
           </div>
-        )}
-      </div>
+        </div>
+      )}
     </ProtectedRoute>
   );
 }

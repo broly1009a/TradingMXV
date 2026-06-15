@@ -5,6 +5,7 @@ import * as bcrypt from 'bcrypt';
 import { Department } from '../schemas/department.schema';
 import { User } from '../schemas/user.schema';
 import { ChecklistTemplate } from '../schemas/template.schema';
+import { Division } from '../schemas/division.schema';
 
 @Injectable()
 export class SeedService implements OnApplicationBootstrap {
@@ -14,13 +15,15 @@ export class SeedService implements OnApplicationBootstrap {
     @InjectModel(Department.name) private readonly departmentModel: Model<Department>,
     @InjectModel(User.name) private readonly userModel: Model<User>,
     @InjectModel(ChecklistTemplate.name) private readonly templateModel: Model<ChecklistTemplate>,
+    @InjectModel(Division.name) private readonly divisionModel: Model<Division>,
   ) {}
 
   async onApplicationBootstrap() {
     this.logger.log('Starting database seeding...');
     try {
-      const depts = await this.seedDepartments();
-      await this.seedUsers(depts);
+      const divs = await this.seedDivisions();
+      const depts = await this.seedDepartments(divs);
+      await this.seedUsers(divs, depts);
       await this.seedTemplates(depts);
       this.logger.log('Database seeding completed successfully.');
     } catch (error) {
@@ -28,11 +31,32 @@ export class SeedService implements OnApplicationBootstrap {
     }
   }
 
-  private async seedDepartments(): Promise<Record<string, string>> {
+  private async seedDivisions(): Promise<Record<string, string>> {
+    const divisions = [
+      { name: 'Khối Công nghệ thông tin', code: 'IT_DIVISION' },
+      { name: 'Khối Quản lý Giao dịch', code: 'TRADE_DIVISION' },
+      { name: 'Khối Hành chính Nhân sự', code: 'HR_DIVISION' },
+    ];
+
+    const mapping: Record<string, string> = {};
+    for (const div of divisions) {
+      let doc = await this.divisionModel.findOne({ code: div.code }).exec();
+      if (!doc) {
+        doc = new this.divisionModel(div);
+        await doc.save();
+        this.logger.log(`Seeded division: ${div.name}`);
+      }
+      mapping[div.code] = doc._id.toString();
+    }
+    return mapping;
+  }
+
+  private async seedDepartments(divs: Record<string, string>): Promise<Record<string, string>> {
     const departments = [
-      { name: 'IT Vận Hành Core', code: 'IT_CORE' },
-      { name: 'Phòng Nghiệp Vụ Giao Nhận', code: 'RE_OPS' },
-      { name: 'Phòng Giám Sát Thị Trường', code: 'MARKET_SURV' },
+      { name: 'Vận hành Hệ thống công nghệ thông tin', code: 'IT_CORE', divisionId: divs['IT_DIVISION'] },
+      { name: 'Nghiên cứu và Phát triển Công nghệ', code: 'IT_RND', divisionId: divs['IT_DIVISION'] },
+      { name: 'Phòng Nghiệp Vụ Giao Nhận', code: 'RE_OPS', divisionId: divs['TRADE_DIVISION'] },
+      { name: 'Phòng Giám Sát Thị Trường', code: 'MARKET_SURV', divisionId: divs['TRADE_DIVISION'] },
     ];
 
     const mapping: Record<string, string> = {};
@@ -42,44 +66,97 @@ export class SeedService implements OnApplicationBootstrap {
         doc = new this.departmentModel(dept);
         await doc.save();
         this.logger.log(`Seeded department: ${dept.name}`);
+      } else {
+        // Cập nhật divisionId và tên mới cho các bộ phận cũ
+        doc.name = dept.name;
+        doc.divisionId = dept.divisionId as any;
+        await doc.save();
       }
       mapping[dept.code] = doc._id.toString();
     }
     return mapping;
   }
 
-  private async seedUsers(depts: Record<string, string>) {
+  private async seedUsers(divs: Record<string, string>, depts: Record<string, string>) {
     const passwordHashAdmin = await bcrypt.hash('Admin@MXV123', 10);
     const passwordHashStaff = await bcrypt.hash('Staff@MXV123', 10);
+    const passwordHashLeader = await bcrypt.hash('Lead@MXV123', 10);
+    const passwordHashDirector = await bcrypt.hash('Director@MXV123', 10);
+    const passwordHashCeo = await bcrypt.hash('Ceo@MXV123', 10);
+    const passwordHashChairman = await bcrypt.hash('Chairman@MXV123', 10);
 
     const users = [
       {
         username: 'admin',
         passwordHash: passwordHashAdmin,
         fullName: 'System Administrator',
-        departmentId: depts['IT_CORE'],
+        divisionId: null,
+        departmentId: null,
         role: 'ADMIN',
+        isActive: true,
+      },
+      {
+        username: 'chairman',
+        passwordHash: passwordHashChairman,
+        fullName: 'Chủ tịch Hội đồng',
+        divisionId: null,
+        departmentId: null,
+        role: 'CHAIRMAN',
+        isActive: true,
+      },
+      {
+        username: 'ceo',
+        passwordHash: passwordHashCeo,
+        fullName: 'Tổng Giám đốc',
+        divisionId: null,
+        departmentId: null,
+        role: 'CEO',
+        isActive: true,
+      },
+      {
+        username: 'dir_it',
+        passwordHash: passwordHashDirector,
+        fullName: 'Giám đốc Khối CNTT',
+        divisionId: divs['IT_DIVISION'],
+        departmentId: null,
+        role: 'DIVISION_DIRECTOR',
+        isActive: true,
+      },
+      {
+        username: 'lead_it_ops',
+        passwordHash: passwordHashLeader,
+        fullName: 'Trưởng bộ phận Vận hành',
+        divisionId: divs['IT_DIVISION'],
+        departmentId: depts['IT_CORE'],
+        role: 'DEPARTMENT_HEAD',
+        isActive: true,
       },
       {
         username: 'sonhh',
         passwordHash: passwordHashStaff,
         fullName: 'Hồ Huy Sơn',
+        divisionId: divs['IT_DIVISION'],
         departmentId: depts['IT_CORE'],
         role: 'STAFF',
+        isActive: true,
       },
       {
         username: 'ops_staff',
         passwordHash: passwordHashStaff,
-        fullName: 'Ops Specialist',
+        fullName: 'Nhân viên Giao nhận',
+        divisionId: divs['TRADE_DIVISION'],
         departmentId: depts['RE_OPS'],
         role: 'STAFF',
+        isActive: true,
       },
       {
         username: 'surv_staff',
         passwordHash: passwordHashStaff,
-        fullName: 'Surveillance Specialist',
+        fullName: 'Nhân viên Giám sát',
+        divisionId: divs['TRADE_DIVISION'],
         departmentId: depts['MARKET_SURV'],
         role: 'STAFF',
+        isActive: true,
       },
     ];
 
@@ -89,6 +166,14 @@ export class SeedService implements OnApplicationBootstrap {
         const doc = new this.userModel(user);
         await doc.save();
         this.logger.log(`Seeded user: ${user.username}`);
+      } else {
+        // Cập nhật vai trò, phòng ban và trạng thái kích hoạt cho tài khoản hiện có
+        existing.isActive = true;
+        existing.role = user.role;
+        existing.fullName = user.fullName;
+        existing.divisionId = user.divisionId as any;
+        existing.departmentId = user.departmentId as any;
+        await existing.save();
       }
     }
   }

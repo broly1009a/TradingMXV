@@ -27,13 +27,15 @@ export class TelegramService implements OnModuleInit {
     }, 60000);
   }
 
-  async sendMessage(text: string): Promise<void> {
-    // Check if token and chat ID are configured
+  async sendMessage(text: string, customChatId?: string): Promise<void> {
+    const targetChatId = customChatId || this.chatId;
+    
+    // Check if token and target chat ID are configured
     const isConfigured = 
       this.botToken && 
       this.botToken !== 'YOUR_BOT_TOKEN' && 
-      this.chatId && 
-      this.chatId !== 'YOUR_CHAT_ID';
+      targetChatId && 
+      targetChatId !== 'YOUR_CHAT_ID';
 
     if (isConfigured) {
       try {
@@ -42,14 +44,14 @@ export class TelegramService implements OnModuleInit {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            chat_id: this.chatId,
+            chat_id: targetChatId,
             text,
             parse_mode: 'HTML',
           }),
         });
         if (!res.ok) {
           const errText = await res.text();
-          this.logger.error(`Gửi tin nhắn Telegram thất bại: ${errText}`);
+          this.logger.error(`Gửi tin nhắn Telegram đến ${targetChatId} thất bại: ${errText}`);
         }
       } catch (err) {
         this.logger.error('Lỗi kết nối API Telegram:', err);
@@ -57,7 +59,7 @@ export class TelegramService implements OnModuleInit {
     } else {
       // Simulation Mode inside terminal log
       console.log('\n========================================================================');
-      console.log('[TELEGRAM SIMULATION BOT ALERT]');
+      console.log(`[TELEGRAM SIMULATION BOT ALERT - Chat ID: ${targetChatId || 'GROUP_CHAT'}]`);
       console.log(`Nội dung: ${text.replace(/<[^>]*>/g, '')}`); // Strip HTML tags for console printing
       console.log('========================================================================\n');
     }
@@ -72,12 +74,12 @@ export class TelegramService implements OnModuleInit {
     const currentMin = nowVN.getUTCMinutes();
     const currentTotalMins = currentHour * 60 + currentMin;
 
-    // Find active pending shifts for today
+    // Find active pending shifts for today, populating settings
     const activeShifts = await this.shiftLogModel.find({
       status: 'PENDING',
       shiftDate: todayStr,
     })
-    .populate('userId', 'fullName username')
+    .populate('userId', 'fullName username settings')
     .populate({
       path: 'templateId',
       select: 'title'
@@ -85,6 +87,13 @@ export class TelegramService implements OnModuleInit {
     .exec();
 
     for (const shift of activeShifts) {
+      const userObj = shift.userId as any;
+      const userSettings = userObj?.settings;
+      // Lấy ngưỡng cảnh báo động từ cài đặt cá nhân, mặc định là 15 phút
+      const threshold = (userSettings?.alertThresholdMinutes !== undefined && userSettings?.alertThresholdMinutes !== null)
+        ? Number(userSettings.alertThresholdMinutes)
+        : 15;
+
       for (const item of shift.details) {
         if (!item.isChecked && item.deadlineSnapshot) {
           const [deadHour, deadMin] = item.deadlineSnapshot.split(':').map(Number);
@@ -93,8 +102,8 @@ export class TelegramService implements OnModuleInit {
           const deadTotalMins = deadHour * 60 + deadMin;
           const minsDiff = deadTotalMins - currentTotalMins;
 
-          // Cảnh báo nếu sắp đến deadline (trong vòng 15 phút) hoặc đã trễ hạn
-          if (minsDiff <= 15) {
+          // Cảnh báo nếu sắp đến deadline hoặc đã trễ hạn
+          if (minsDiff <= threshold) {
             const warningType = minsDiff < 0 ? 'OVERDUE' : 'COMING_SOON';
             const cacheKey = `${shift._id}-${item.taskId}-${warningType}`;
 
@@ -113,11 +122,17 @@ export class TelegramService implements OnModuleInit {
                 `• Tác vụ: <b>${item.taskId} - ${item.taskNameSnapshot}</b>\n` +
                 `• Mức độ ưu tiên: <b>${item.prioritySnapshot}</b>\n` +
                 `• Thời hạn: ${timeText}\n` +
-                `• Nhân sự trực chính: <b>${(shift.userId as any)?.fullName || 'Chưa rõ'}</b>\n` +
+                `• Nhân sự trực chính: <b>${userObj?.fullName || 'Chưa rõ'}</b>\n` +
                 `• Ca trực: <i>${(shift.templateId as any)?.title || 'Ca vận hành'}</i>\n\n` +
                 `Đề nghị đồng chí trực ban khẩn trương kiểm tra và xử lý gấp!`;
 
+              // 1. Gửi vào group vận hành chung
               await this.sendMessage(message);
+
+              // 2. Gửi riêng cho nhân sự trực nếu cấu hình bật nhận tin nhắn và cung cấp chat ID
+              if (userSettings?.telegramNotifications && userSettings?.telegramChatId) {
+                await this.sendMessage(message, userSettings.telegramChatId);
+              }
             }
           }
         }

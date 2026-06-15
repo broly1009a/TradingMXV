@@ -10,48 +10,48 @@ export class ShiftsController {
   @Post('initialize')
   async initialize(@Request() req: any, @Body() body: any) {
     const { templateId, shiftDate } = body;
-    const userId = req.user._id || req.user.id;
-    return this.shiftsService.initializeShift(templateId, userId, shiftDate);
+    return this.shiftsService.initializeShift(templateId, req.user, shiftDate);
   }
 
   @Patch('items/toggle')
   async toggleItem(@Request() req: any, @Body() body: any) {
     const { shiftLogId, taskId, isChecked, note } = body;
-    const userId = req.user._id || req.user.id;
-    return this.shiftsService.toggleTask(shiftLogId, taskId, isChecked, userId, note);
+    return this.shiftsService.toggleTask(shiftLogId, taskId, isChecked, req.user, note);
   }
 
   @Post('close')
-  async close(@Body() body: any) {
-    const { shiftLogId } = body;
-    return this.shiftsService.closeShift(shiftLogId);
+  async close(@Request() req: any, @Body() body: any) {
+    const { shiftLogId, handoverNote } = body;
+    return this.shiftsService.closeShift(shiftLogId, req.user, handoverNote);
   }
 
   @Get('history')
   async getHistory(
+    @Request() req: any,
     @Query('departmentId') departmentId?: string,
     @Query('startDate') startDate?: string,
     @Query('endDate') endDate?: string,
     @Query('status') status?: string,
   ) {
-    return this.shiftsService.getHistory(departmentId, startDate, endDate, status);
+    return this.shiftsService.getHistory(req.user, departmentId, startDate, endDate, status);
   }
 
   @Get('active')
   async getActive(
-    @Query('departmentId') departmentId: string,
+    @Request() req: any,
+    @Query('departmentId') departmentId?: string,
     @Query('shiftDate') shiftDate?: string,
   ) {
-    return this.shiftsService.getActiveShiftsByDepartment(departmentId, shiftDate);
+    return this.shiftsService.getActiveShiftsByDepartment(req.user, departmentId, shiftDate);
   }
 
   @Get(':id')
-  async getOne(@Param('id') id: string) {
-    return this.shiftsService.getShiftById(id);
+  async getOne(@Request() req: any, @Param('id') id: string) {
+    return this.shiftsService.getShiftById(id, req.user);
   }
 
   @Get(':id/audit-logs')
-  async getAuditLogs(@Param('id') id: string) {
-    return this.shiftsService.getAuditLogs(id);
+  async getAuditLogs(@Request() req: any, @Param('id') id: string) {
+    return this.shiftsService.getAuditLogs(id, req.user);
   }
 }

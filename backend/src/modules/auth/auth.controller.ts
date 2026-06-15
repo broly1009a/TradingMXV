@@ -1,4 +1,4 @@
-import { Controller, Post, Body, Get, UseGuards, Request, UnauthorizedException } from '@nestjs/common';
+import { Controller, Post, Body, Get, Put, UseGuards, Request, UnauthorizedException } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { JwtAuthGuard } from './jwt-auth.guard';
 
@@ -18,10 +18,10 @@ export class AuthController {
 
   @Post('sso')
   async sso(@Body() body: any) {
-    const { email, password } = body;
-    const user = await this.authService.validateSSO(email, password);
+    const { email, fullName } = body;
+    const user = await this.authService.validateMicrosoftSSO(email, fullName);
     if (!user) {
-      throw new UnauthorizedException('Không thể đăng nhập Active Directory');
+      throw new UnauthorizedException('Không thể xác thực tài khoản Microsoft 365');
     }
     return this.authService.login(user);
   }
@@ -30,5 +30,27 @@ export class AuthController {
   @Get('me')
   getProfile(@Request() req: any) {
     return req.user;
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Get('profile')
+  async getProfileDetail(@Request() req: any) {
+    const user = req.user;
+    return {
+      id: user._id,
+      username: user.username,
+      fullName: user.fullName,
+      role: user.role,
+      department: user.departmentId || null,
+      division: user.divisionId || null,
+      isActive: user.isActive,
+      settings: user.settings,
+    };
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Put('profile')
+  async updateProfileDetail(@Request() req: any, @Body() body: any) {
+    return this.authService.updateProfile(req.user._id.toString(), body);
   }
 }

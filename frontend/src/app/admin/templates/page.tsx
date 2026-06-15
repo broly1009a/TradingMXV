@@ -607,20 +607,31 @@ export default function AdminTemplatesPage() {
             </div>
           )}
         </div>
+      </div>
 
-        {/* Template Modal */}
-        {templateModalOpen && (
-          <div style={{
-            position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-            background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(8px)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            zIndex: 1000, padding: '20px'
-          }}>
-            <div className="glass-panel animate-fade-in" style={{
-              width: '100%', maxWidth: '500px',
-              background: '#0d1326', border: '1px solid rgba(255,255,255,0.08)',
-              borderRadius: '16px', padding: '32px',
-              display: 'flex', flexDirection: 'column', gap: '20px'
+      {/* Template Modal */}
+      {templateModalOpen && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0,0,0,0.6)',
+          backdropFilter: 'blur(8px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          overflowY: 'auto',
+          zIndex: 9999, // Đè lên tất cả
+          padding: '20px'
+        }}>
+          <div className="glass-panel" style={{
+            width: '100%', maxWidth: '500px',
+            background: '#0d1326', border: '1px solid rgba(255,255,255,0.08)',
+            borderRadius: '16px', padding: '32px',
+            display: 'flex', flexDirection: 'column', gap: '20px',
+            margin: 'auto' // Căn giữa thông minh và tránh bị cut-off khi màn hình nhỏ
             }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <h2 style={{ fontSize: '1.25rem', fontWeight: 800, color: '#fff', display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -724,10 +735,9 @@ export default function AdminTemplatesPage() {
                   </button>
                 </div>
               </form>
-            </div>
           </div>
-        )}
-      </div>
+        </div>
+      )}
     </ProtectedRoute>
   );
 }

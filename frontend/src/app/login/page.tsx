@@ -3,24 +3,23 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { useRouter } from 'next/navigation';
-import { Shield, Key, User as UserIcon, Mail, Info } from 'lucide-react';
+import { Shield, Key, User as UserIcon, Mail, Info, X } from 'lucide-react';
 
 export default function LoginPage() {
   const { user, login, loginSSO } = useAuth();
   const router = useRouter();
-  
-  const [loginType, setLoginType] = useState<'INTERNAL' | 'SSO'>('INTERNAL');
-  
-  // Fields for Internal Login
+
+  // Internal login fields
   const [username, setUsername] = useState('');
-  
-  // Fields for SSO Login
-  const [email, setEmail] = useState('');
-  
-  // Common password field
   const [password, setPassword] = useState('');
-  
+
+  // SSO Simulation modal fields
+  const [showSSOModal, setShowSSOModal] = useState(false);
+  const [ssoEmail, setSsoEmail] = useState('');
+  const [ssoFullName, setSsoFullName] = useState('');
+
   const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
 
   // If already logged in, redirect to dashboard
@@ -30,38 +29,53 @@ export default function LoginPage() {
     }
   }, [user, router]);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleInternalSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    setSuccess('');
 
-    if (loginType === 'INTERNAL') {
-      if (!username || !password) {
-        setError('Vui lòng nhập đầy đủ tài khoản và mật khẩu');
-        return;
+    if (!username || !password) {
+      setError('Vui lòng nhập đầy đủ tài khoản và mật khẩu.');
+      return;
+    }
+    setLoading(true);
+    try {
+      await login(username, password);
+    } catch (err: any) {
+      setError(err.message || 'Đăng nhập thất bại. Vui lòng kiểm tra lại.');
+      setLoading(false);
+    }
+  };
+
+  const handleSSOSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    setSuccess('');
+
+    if (!ssoEmail) {
+      setError('Vui lòng nhập email Microsoft.');
+      return;
+    }
+    if (!ssoEmail.endsWith('@mxv.vn')) {
+      setError('Email bắt buộc phải thuộc tên miền Sở MXV (@mxv.vn).');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      await loginSSO(ssoEmail, ssoFullName);
+      setSuccess('Đăng nhập Microsoft 365 thành công!');
+      setShowSSOModal(false);
+    } catch (err: any) {
+      // If the error indicates waiting for admin activation
+      if (err.message && err.message.includes('chờ Admin kích hoạt')) {
+        setError(err.message);
+        setSuccess('Tài khoản đã được tạo tự động từ Microsoft 365! Vui lòng chờ Admin kích hoạt.');
+        setShowSSOModal(false);
+      } else {
+        setError(err.message || 'Đăng nhập Microsoft 365 thất bại.');
       }
-      setLoading(true);
-      try {
-        await login(username, password);
-      } catch (err: any) {
-        setError(err.message || 'Đăng nhập thất bại. Vui lòng kiểm tra lại thông tin.');
-        setLoading(false);
-      }
-    } else {
-      if (!email || !password) {
-        setError('Vui lòng nhập đầy đủ email và mật khẩu AD');
-        return;
-      }
-      if (!email.endsWith('@mxv.com.vn')) {
-        setError('Email bắt buộc phải thuộc tên miền Sở MXV (@mxv.com.vn)');
-        return;
-      }
-      setLoading(true);
-      try {
-        await loginSSO(email, password);
-      } catch (err: any) {
-        setError(err.message || 'Đăng nhập Active Directory thất bại.');
-        setLoading(false);
-      }
+      setLoading(false);
     }
   };
 
@@ -108,58 +122,6 @@ export default function LoginPage() {
           </p>
         </div>
 
-        {/* Tab Switcher */}
-        <div style={{
-          display: 'flex',
-          background: 'rgba(255,255,255,0.03)',
-          padding: '4px',
-          borderRadius: '8px',
-          border: '1px solid var(--border-color)',
-        }}>
-          <button
-            type="button"
-            onClick={() => {
-              setLoginType('INTERNAL');
-              setError('');
-            }}
-            style={{
-              flex: 1,
-              padding: '10px 0',
-              border: 'none',
-              background: loginType === 'INTERNAL' ? 'rgba(59, 130, 246, 0.15)' : 'transparent',
-              color: loginType === 'INTERNAL' ? '#fff' : 'var(--text-secondary)',
-              borderRadius: '6px',
-              fontSize: '0.85rem',
-              fontWeight: 600,
-              cursor: 'pointer',
-              transition: 'all 0.2s ease',
-            }}
-          >
-            Nội Bộ
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setLoginType('SSO');
-              setError('');
-            }}
-            style={{
-              flex: 1,
-              padding: '10px 0',
-              border: 'none',
-              background: loginType === 'SSO' ? 'rgba(59, 130, 246, 0.15)' : 'transparent',
-              color: loginType === 'SSO' ? '#fff' : 'var(--text-secondary)',
-              borderRadius: '6px',
-              fontSize: '0.85rem',
-              fontWeight: 600,
-              cursor: 'pointer',
-              transition: 'all 0.2s ease',
-            }}
-          >
-            Active Directory (SSO)
-          </button>
-        </div>
-
         {error && (
           <div style={{
             background: 'rgba(239, 68, 68, 0.1)',
@@ -174,55 +136,45 @@ export default function LoginPage() {
           </div>
         )}
 
-        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-          
-          {loginType === 'INTERNAL' ? (
-            /* Internal Login fields */
-            <div style={{ textAlign: 'left' }}>
-              <label style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: '6px' }}>
-                Tên đăng nhập
-              </label>
-              <div style={{ position: 'relative' }}>
-                <div style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }}>
-                  <UserIcon size={18} />
-                </div>
-                <input
-                  type="text"
-                  className="form-input"
-                  placeholder="Nhập tên đăng nhập"
-                  style={{ paddingLeft: '44px' }}
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
-                  disabled={loading}
-                />
+        {success && (
+          <div style={{
+            background: 'rgba(16, 185, 129, 0.1)',
+            border: '1px solid rgba(16, 185, 129, 0.2)',
+            padding: '12px 16px',
+            borderRadius: '8px',
+            color: 'var(--color-primary)',
+            fontSize: '0.875rem',
+            textAlign: 'left',
+          }}>
+            {success}
+          </div>
+        )}
+
+        {/* Internal Login Form */}
+        <form onSubmit={handleInternalSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          <div style={{ textAlign: 'left' }}>
+            <label style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: '6px' }}>
+              Tên đăng nhập
+            </label>
+            <div style={{ position: 'relative' }}>
+              <div style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }}>
+                <UserIcon size={18} />
               </div>
+              <input
+                type="text"
+                className="form-input"
+                placeholder="Nhập tên đăng nhập"
+                style={{ paddingLeft: '44px' }}
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                disabled={loading}
+              />
             </div>
-          ) : (
-            /* SSO AD Login fields */
-            <div style={{ textAlign: 'left' }}>
-              <label style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: '6px' }}>
-                Email Sở MXV
-              </label>
-              <div style={{ position: 'relative' }}>
-                <div style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }}>
-                  <Mail size={18} />
-                </div>
-                <input
-                  type="email"
-                  className="form-input"
-                  placeholder="name@mxv.com.vn"
-                  style={{ paddingLeft: '44px' }}
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  disabled={loading}
-                />
-              </div>
-            </div>
-          )}
+          </div>
 
           <div style={{ textAlign: 'left' }}>
             <label style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: '6px' }}>
-              {loginType === 'INTERNAL' ? 'Mật khẩu' : 'Mật khẩu Active Directory'}
+              Mật khẩu
             </label>
             <div style={{ position: 'relative' }}>
               <div style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }}>
@@ -231,7 +183,7 @@ export default function LoginPage() {
               <input
                 type="password"
                 className="form-input"
-                placeholder={loginType === 'INTERNAL' ? "Nhập mật khẩu" : "Mật khẩu miền AD"}
+                placeholder="Nhập mật khẩu"
                 style={{ paddingLeft: '44px' }}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
@@ -240,40 +192,207 @@ export default function LoginPage() {
             </div>
           </div>
 
-          {loginType === 'SSO' && (
-            <div style={{
-              background: 'rgba(59, 130, 246, 0.05)',
-              border: '1px solid rgba(59, 130, 246, 0.1)',
-              borderRadius: '8px',
-              padding: '12px',
-              fontSize: '0.75rem',
-              color: 'var(--text-secondary)',
-              textAlign: 'left',
-              display: 'flex',
-              gap: '8px',
-              lineHeight: '1.4'
-            }}>
-              <Info size={16} color="#3b82f6" style={{ flexShrink: 0 }} />
-              <div>
-                Sử dụng email có đuôi <strong>@mxv.com.vn</strong> (ví dụ: <code>it_user@mxv.com.vn</code> hoặc <code>ops_user@mxv.com.vn</code>) và mật khẩu AD: <code>Mxv@2026</code> để giả lập đăng nhập đồng bộ.
-              </div>
-            </div>
-          )}
-
           <button
             type="submit"
             className="btn btn-primary"
             style={{ width: '100%', padding: '14px', fontSize: '1rem', marginTop: '10px' }}
             disabled={loading}
           >
-            {loading ? 'Đang xác thực...' : (loginType === 'INTERNAL' ? 'Đăng Nhập' : 'Đăng Nhập SSO')}
+            {loading && !showSSOModal ? 'Đang xác thực...' : 'Đăng Nhập'}
           </button>
         </form>
 
+        {/* Separator */}
+        <div style={{ display: 'flex', alignItems: 'center', margin: '8px 0' }}>
+          <div style={{ flex: 1, height: '1px', background: 'var(--border-color)' }}></div>
+          <span style={{ padding: '0 12px', fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: 600 }}>HOẶC</span>
+          <div style={{ flex: 1, height: '1px', background: 'var(--border-color)' }}></div>
+        </div>
+
+        {/* Microsoft 365 SSO Login Button */}
+        <button
+          type="button"
+          onClick={() => {
+            setError('');
+            setSuccess('');
+            setShowSSOModal(true);
+          }}
+          className="btn"
+          style={{
+            width: '100%',
+            padding: '12px 14px',
+            fontSize: '0.95rem',
+            fontWeight: 600,
+            background: 'transparent',
+            border: '1px solid rgba(255,255,255,0.15)',
+            color: '#fff',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '12px',
+            cursor: 'pointer',
+            borderRadius: '8px',
+            transition: 'all 0.2s ease',
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.background = 'rgba(255,255,255,0.05)';
+            e.currentTarget.style.borderColor = 'rgba(255,255,255,0.3)';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = 'transparent';
+            e.currentTarget.style.borderColor = 'rgba(255,255,255,0.15)';
+          }}
+        >
+          {/* Microsoft colored 4-square logo using SVG */}
+          <svg width="18" height="18" viewBox="0 0 23 23" fill="none" style={{ flexShrink: 0 }}>
+            <rect width="10.5" height="10.5" fill="#F25022"/>
+            <rect x="12" width="10.5" height="10.5" fill="#7FBA00"/>
+            <rect y="12" width="10.5" height="10.5" fill="#00A4EF"/>
+            <rect x="12" y="12" width="10.5" height="10.5" fill="#FFB900"/>
+          </svg>
+          Đăng nhập bằng Microsoft 365
+        </button>
+
         <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', borderTop: '1px solid var(--border-color)', paddingTop: '16px' }}>
-          Hệ thống giám sát vận hành nội bộ IT Core v1.2.0
+          Hệ thống giám sát vận hành nội bộ IT Core v1.3.0
         </div>
       </div>
+
+      {/* Simulated Microsoft SSO Login Modal */}
+      {showSSOModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0,0,0,0.6)',
+          backdropFilter: 'blur(8px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000,
+          padding: '20px'
+        }}>
+          <div className="glass-panel animate-fade-in" style={{
+            width: '100%',
+            maxWidth: '440px',
+            background: '#0d1326',
+            border: '1px solid rgba(255,255,255,0.08)',
+            borderRadius: '16px',
+            padding: '32px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '20px'
+          }}>
+            {/* Modal Header */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <svg width="18" height="18" viewBox="0 0 23 23" fill="none">
+                  <rect width="10.5" height="10.5" fill="#F25022"/>
+                  <rect x="12" width="10.5" height="10.5" fill="#7FBA00"/>
+                  <rect y="12" width="10.5" height="10.5" fill="#00A4EF"/>
+                  <rect x="12" y="12" width="10.5" height="10.5" fill="#FFB900"/>
+                </svg>
+                <h2 style={{ fontSize: '1.15rem', fontWeight: 800, color: '#fff' }}>
+                  Xác thực tài khoản Microsoft 365
+                </h2>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowSSOModal(false)}
+                style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', lineHeight: '1.4', marginTop: '-8px' }}>
+              Nhập email Office 365 doanh nghiệp của bạn. Nếu chưa có tài khoản trên hệ thống, hệ thống sẽ tự động đăng ký và chờ Admin phê duyệt.
+            </p>
+
+            <form onSubmit={handleSSOSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div style={{ textAlign: 'left' }}>
+                <label style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: '6px' }}>
+                  Email cơ quan (@mxv.vn) *
+                </label>
+                <div style={{ position: 'relative' }}>
+                  <div style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }}>
+                    <Mail size={16} />
+                  </div>
+                  <input
+                    type="email"
+                    className="form-input"
+                    placeholder="username@mxv.vn"
+                    style={{ paddingLeft: '40px', fontSize: '0.9rem' }}
+                    value={ssoEmail}
+                    onChange={(e) => setSsoEmail(e.target.value)}
+                    disabled={loading}
+                    required
+                  />
+                </div>
+              </div>
+
+              <div style={{ textAlign: 'left' }}>
+                <label style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: '6px' }}>
+                  Họ và tên hiển thị (Chỉ dùng khi đăng ký mới)
+                </label>
+                <div style={{ position: 'relative' }}>
+                  <div style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }}>
+                    <UserIcon size={16} />
+                  </div>
+                  <input
+                    type="text"
+                    className="form-input"
+                    placeholder="Nguyễn Văn A (bỏ trống nếu đã có tài khoản)"
+                    style={{ paddingLeft: '40px', fontSize: '0.9rem' }}
+                    value={ssoFullName}
+                    onChange={(e) => setSsoFullName(e.target.value)}
+                    disabled={loading}
+                  />
+                </div>
+              </div>
+
+              <div style={{
+                background: 'rgba(59, 130, 246, 0.04)',
+                border: '1px solid rgba(59, 130, 246, 0.08)',
+                borderRadius: '8px',
+                padding: '12px',
+                fontSize: '0.75rem',
+                color: 'var(--text-secondary)',
+                lineHeight: '1.4',
+                display: 'flex',
+                gap: '8px'
+              }}>
+                <Info size={16} color="#3b82f6" style={{ flexShrink: 0 }} />
+                <div>
+                  Đây là môi trường phát triển nội bộ. Hệ thống sẽ bỏ qua bước MFA và lấy trực tiếp thông tin từ Email để phân tích tạo tài khoản.
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', gap: '12px', marginTop: '10px' }}>
+                <button
+                  type="button"
+                  onClick={() => setShowSSOModal(false)}
+                  className="btn btn-secondary"
+                  style={{ flex: 1 }}
+                  disabled={loading}
+                >
+                  Hủy
+                </button>
+                <button
+                  type="submit"
+                  className="btn btn-primary"
+                  style={{ flex: 1 }}
+                  disabled={loading}
+                >
+                  {loading ? 'Đang xác thực...' : 'Đăng Nhập'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

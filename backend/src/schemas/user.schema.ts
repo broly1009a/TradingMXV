@@ -13,11 +13,36 @@ export class User extends Document {
   @Prop({ required: true })
   fullName: string;
 
-  @Prop({ type: Types.ObjectId, ref: 'Department', required: true })
-  departmentId: Types.ObjectId;
+  @Prop({ type: Types.ObjectId, ref: 'Department', required: false, default: null })
+  departmentId?: Types.ObjectId | null;
 
-  @Prop({ required: true, enum: ['ADMIN', 'LEADER', 'STAFF'], default: 'STAFF' })
+  @Prop({ type: Types.ObjectId, ref: 'Division', required: false, default: null })
+  divisionId?: Types.ObjectId | null;
+
+  @Prop({ required: true, enum: ['ADMIN', 'CHAIRMAN', 'CEO', 'DIVISION_DIRECTOR', 'DEPARTMENT_HEAD', 'STAFF'], default: 'STAFF' })
   role: string;
+
+  @Prop({ required: true, type: Boolean, default: false })
+  isActive: boolean;
+
+  @Prop({
+    type: {
+      theme: { type: String, enum: ['dark', 'light'], default: 'dark' },
+      autoRefreshInterval: { type: Number, default: 30 },
+      telegramNotifications: { type: Boolean, default: true },
+      telegramChatId: { type: String, default: '' },
+      alertThresholdMinutes: { type: Number, default: 15 },
+    },
+    _id: false,
+    default: () => ({})
+  })
+  settings: {
+    theme: 'dark' | 'light';
+    autoRefreshInterval: number;
+    telegramNotifications: boolean;
+    telegramChatId: string;
+    alertThresholdMinutes: number;
+  };
 }
 
 export const UserSchema = SchemaFactory.createForClass(User);

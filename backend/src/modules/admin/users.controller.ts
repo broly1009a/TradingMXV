@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Put, Delete, Body, Param, UseGuards, ConflictException } from '@nestjs/common';
+import { Controller, Get, Post, Put, Delete, Body, Param, UseGuards, ConflictException, BadRequestException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import * as bcrypt from 'bcrypt';
@@ -17,12 +17,23 @@ export class UsersController {
 
   @Get()
   async findAll() {
-    return this.userModel.find().populate('departmentId').sort({ username: 1 }).exec();
+    return this.userModel.find().populate('departmentId').populate('divisionId').sort({ username: 1 }).exec();
   }
 
   @Post()
   async create(@Body() body: any) {
-    const { username, password, fullName, departmentId, role } = body;
+    const { username, password, fullName, departmentId, divisionId, role, isActive } = body;
+    const isActiveVal = isActive !== undefined ? isActive : true;
+    
+    if (isActiveVal) {
+      if ((role === 'STAFF' || role === 'DEPARTMENT_HEAD') && !departmentId) {
+        throw new BadRequestException('Tài khoản Nhân viên / Trưởng bộ phận đã kích hoạt bắt buộc phải được gán Phòng ban');
+      }
+      if (role === 'DIVISION_DIRECTOR' && !divisionId) {
+        throw new BadRequestException('Tài khoản Giám đốc Khối đã kích hoạt bắt buộc phải được gán Khối quản lý');
+      }
+    }
+
     const existing = await this.userModel.findOne({ username }).exec();
     if (existing) {
       throw new ConflictException('Tài khoản đã tồn tại');
@@ -32,20 +43,41 @@ export class UsersController {
       username,
       passwordHash,
       fullName,
-      departmentId,
+      departmentId: departmentId || null,
+      divisionId: divisionId || null,
       role,
+      isActive: isActiveVal,
     });
     return newUser.save();
   }
 
   @Put(':id')
   async update(@Param('id') id: string, @Body() body: any) {
-    const { password, ...rest } = body;
-    const updateData: any = { ...rest };
+    const { password, departmentId, divisionId, ...rest } = body;
+    const isActiveVal = body.isActive;
+    const role = body.role;
+    
+    if (isActiveVal) {
+      if ((role === 'STAFF' || role === 'DEPARTMENT_HEAD') && !departmentId) {
+        throw new BadRequestException('Tài khoản Nhân viên / Trưởng bộ phận đã kích hoạt bắt buộc phải được gán Phòng ban');
+      }
+      if (role === 'DIVISION_DIRECTOR' && !divisionId) {
+        throw new BadRequestException('Tài khoản Giám đốc Khối đã kích hoạt bắt buộc phải được gán Khối quản lý');
+      }
+    }
+
+    const updateData: any = { 
+      ...rest,
+      departmentId: departmentId || null,
+      divisionId: divisionId || null,
+    };
     if (password) {
       updateData.passwordHash = await bcrypt.hash(password, 10);
     }
-    return this.userModel.findByIdAndUpdate(id, updateData, { new: true }).populate('departmentId').exec();
+    return this.userModel.findByIdAndUpdate(id, updateData, { new: true })
+      .populate('departmentId')
+      .populate('divisionId')
+      .exec();
   }
 
   @Delete(':id')

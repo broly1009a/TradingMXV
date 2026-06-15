@@ -59,6 +59,13 @@ interface ShiftLog {
     username: string;
   };
   details: TaskDetail[];
+  closedBy?: {
+    _id: string;
+    fullName: string;
+    username: string;
+  };
+  closedAt?: string;
+  handoverNote?: string;
 }
 
 interface AuditLog {
@@ -275,9 +282,12 @@ function ChecklistWorksheet() {
 
   const handleCloseShift = async () => {
     if (!log || !token) return;
-    if (!window.confirm('Bạn có chắc chắn muốn CHỐT ca trực này? Sau khi chốt, toàn bộ tác vụ sẽ không thể sửa đổi.')) {
-      return;
-    }
+    const noteInput = window.prompt(
+      'Nhập Biên Bản Bàn Giao Ca Trực (Thông tin bàn giao vị thế, trạng thái hệ thống cho ca sau,...):',
+      ''
+    );
+    if (noteInput === null) return;
+
     setLoading(true);
     setActionError('');
     setActionSuccess('');
@@ -288,7 +298,10 @@ function ChecklistWorksheet() {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`
         },
-        body: JSON.stringify({ shiftLogId: log._id })
+        body: JSON.stringify({ 
+          shiftLogId: log._id,
+          handoverNote: noteInput
+        })
       });
 
       if (!res.ok) {
@@ -579,7 +592,23 @@ function ChecklistWorksheet() {
                   <strong style={{ color: 'var(--color-accent)' }}>ĐANG TRỰC</strong>
                 )}
               </span>
+              {isCompleted && log.closedBy && (
+                <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <UserCheck size={16} color="var(--color-primary)" /> Người chốt: <strong style={{ color: '#fff' }}>{log.closedBy.fullName}</strong>
+                </span>
+              )}
+              {isCompleted && log.closedAt && (
+                <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <Clock size={16} color="var(--color-primary)" /> Giờ chốt: <strong style={{ color: '#fff' }}>{new Date(log.closedAt).toLocaleTimeString('vi-VN')} {new Date(log.closedAt).toLocaleDateString('vi-VN')}</strong>
+                </span>
+              )}
             </div>
+            {isCompleted && log.handoverNote && (
+              <div style={{ marginTop: '12px', padding: '12px', background: 'rgba(255, 255, 255, 0.02)', borderRadius: '8px', borderLeft: '3px solid var(--color-primary)', maxWidth: '700px' }}>
+                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block', marginBottom: '4px', textTransform: 'uppercase', fontWeight: 700 }}>Biên bản bàn giao ca trực:</span>
+                <p style={{ margin: 0, color: '#fff', fontSize: '0.9rem', fontStyle: 'italic', lineHeight: '1.4' }}>"{log.handoverNote}"</p>
+              </div>
+            )}
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '24px' }}>
@@ -817,6 +846,11 @@ function ChecklistWorksheet() {
           <div><strong>Trực chính:</strong> {log.userId?.fullName}</div>
           <div><strong>Tiến độ ca trực:</strong> {log.progressPercentage}%</div>
           <div><strong>Trạng thái:</strong> {log.status === 'COMPLETED' ? 'ĐÃ CHỐT CA' : 'ĐANG VẬN HÀNH'}</div>
+          {log.handoverNote && (
+            <div style={{ gridColumn: 'span 2', marginTop: '10px', padding: '8px', border: '1px dashed #000' }}>
+              <strong>Biên bản bàn giao ca trực:</strong> <i>"{log.handoverNote}"</i>
+            </div>
+          )}
         </div>
 
         <table className="print-table">

@@ -57,6 +57,13 @@ interface ShiftLog {
   };
   details: TaskDetail[];
   createdAt: string;
+  closedBy?: {
+    _id: string;
+    fullName: string;
+    username: string;
+  };
+  closedAt?: string;
+  handoverNote?: string;
 }
 
 function HistoryAudit() {
@@ -202,7 +209,7 @@ function HistoryAudit() {
             <div style={{ color: 'var(--text-muted)', textAlign: 'center', padding: '40px 0' }}>Không tìm thấy ca trực nào phù hợp với bộ lọc.</div>
           ) : (
             <div style={{ overflowX: 'auto' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.9rem' }}>
+              <table style={{ width: '100%', minWidth: '950px', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.9rem' }}>
                 <thead>
                   <tr style={{ borderBottom: '1px solid var(--border-color)', color: 'var(--text-secondary)' }}>
                     <th style={{ padding: '12px 16px' }}>Ngày trực</th>
@@ -289,13 +296,31 @@ function HistoryAudit() {
                   <h2 style={{ fontSize: '1.4rem', fontWeight: 800, color: '#fff', marginBottom: '6px' }}>
                     {activeDetail.templateId?.title}
                   </h2>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px', fontSize: '0.8rem', color: 'var(--text-secondary)', flexWrap: 'wrap' }}>
                     <span>Ngày: <strong>{activeDetail.shiftDate}</strong></span>
                     <span>•</span>
                     <span>Cán bộ trực chính: <strong>{activeDetail.userId?.fullName}</strong></span>
                     <span>•</span>
                     <span>Tiến độ: <strong>{activeDetail.progressPercentage}%</strong></span>
+                    {activeDetail.status === 'COMPLETED' && activeDetail.closedBy && (
+                      <>
+                        <span>•</span>
+                        <span>Người chốt: <strong style={{ color: 'var(--color-primary)' }}>{activeDetail.closedBy.fullName}</strong></span>
+                      </>
+                    )}
+                    {activeDetail.status === 'COMPLETED' && activeDetail.closedAt && (
+                      <>
+                        <span>•</span>
+                        <span>Giờ chốt: <strong style={{ color: 'var(--color-primary)' }}>{new Date(activeDetail.closedAt).toLocaleTimeString('vi-VN')} {new Date(activeDetail.closedAt).toLocaleDateString('vi-VN')}</strong></span>
+                      </>
+                    )}
                   </div>
+                  {activeDetail.status === 'COMPLETED' && activeDetail.handoverNote && (
+                    <div style={{ marginTop: '12px', padding: '10px 12px', background: 'rgba(16, 185, 129, 0.05)', borderRadius: '6px', borderLeft: '3px solid var(--color-primary)' }}>
+                      <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block', marginBottom: '2px', fontWeight: 700, textTransform: 'uppercase' }}>Biên bản bàn giao ca trực:</span>
+                      <p style={{ margin: 0, color: '#fff', fontSize: '0.85rem', fontStyle: 'italic' }}>"{activeDetail.handoverNote}"</p>
+                    </div>
+                  )}
                 </div>
                 <button 
                   onClick={() => setActiveDetail(null)}

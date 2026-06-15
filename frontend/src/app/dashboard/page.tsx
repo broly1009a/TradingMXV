@@ -345,7 +345,7 @@ export default function DashboardPage() {
             <div style={{ color: 'var(--text-muted)', textAlign: 'center', padding: '20px 0' }}>Chưa ghi nhận ca trực lịch sử nào</div>
           ) : (
             <div style={{ overflowX: 'auto' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.9rem' }}>
+              <table style={{ width: '100%', minWidth: '950px', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.9rem' }}>
                 <thead>
                   <tr style={{ borderBottom: '1px solid var(--border-color)', color: 'var(--text-secondary)' }}>
                     <th style={{ padding: '12px 16px' }}>Ngày trực</th>

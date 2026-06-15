@@ -49,6 +49,15 @@ export class ShiftLog extends Document {
 
   @Prop({ type: [ShiftLogDetailSchema], default: [] })
   details: ShiftLogDetail[];
+
+  @Prop({ type: Types.ObjectId, ref: 'User', default: null })
+  closedBy?: Types.ObjectId | null;
+
+  @Prop({ type: Date, default: null })
+  closedAt?: Date | null;
+
+  @Prop({ type: String, default: null })
+  handoverNote?: string | null;
 }
 
 export const ShiftLogSchema = SchemaFactory.createForClass(ShiftLog);

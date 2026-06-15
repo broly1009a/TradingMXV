@@ -9,15 +9,15 @@ import { User, UserSchema } from '../../schemas/user.schema';
 
 @Module({
   imports: [
-    MongooseModule.forFeature([{ name: User.name, schema: UserSchema }]),
-    PassportModule,
-    JwtModule.register({
+    MongooseModule.forFeature([{ name: User.name, schema: UserSchema }]), // khai báo model User
+    PassportModule, // module passport
+    JwtModule.register({  // module jwt
       secret: process.env.JWT_SECRET || 'trading_mxv_secret_key_2026',
       signOptions: { expiresIn: '1d' },
     }),
   ],
-  providers: [AuthService, JwtStrategy],
-  controllers: [AuthController],
-  exports: [AuthService, MongooseModule, JwtModule],
+  providers: [AuthService, JwtStrategy], // khai báo service và strategy
+  controllers: [AuthController], // khai báo controller
+  exports: [AuthService, MongooseModule, JwtModule], // export các module
 })
-export class AuthModule {}
+export class AuthModule { }

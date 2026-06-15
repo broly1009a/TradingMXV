@@ -14,6 +14,19 @@ interface User {
     name: string;
     code: string;
   };
+  division?: {
+    _id: string;
+    id: string;
+    name: string;
+    code: string;
+  };
+  settings?: {
+    theme: 'dark' | 'light';
+    autoRefreshInterval: number;
+    telegramNotifications: boolean;
+    telegramChatId: string;
+    alertThresholdMinutes: number;
+  };
 }
 
 interface AuthContextType {
@@ -21,8 +34,9 @@ interface AuthContextType {
   token: string | null;
   loading: boolean;
   login: (username: string, pass: string) => Promise<void>;
-  loginSSO: (email: string, pass: string) => Promise<void>;
+  loginSSO: (email: string, fullName: string) => Promise<void>;
   logout: () => void;
+  updateUser: (updatedUser: User) => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -70,6 +84,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       setToken(tokenVal);
       setUser(userVal);
+      setLoading(false);
       
       // Redirect to dashboard
       router.push('/dashboard');
@@ -79,13 +94,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const loginSSO = async (email: string, pass: string) => {
+  const loginSSO = async (email: string, fullName: string) => {
     setLoading(true);
     try {
       const res = await fetch(`${API_BASE_URL}/api/v1/auth/sso`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password: pass }),
+        body: JSON.stringify({ email, fullName }),
       });
 
       if (!res.ok) {
@@ -102,6 +117,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       setToken(tokenVal);
       setUser(userVal);
+      setLoading(false);
       
       // Redirect to dashboard
       router.push('/dashboard');
@@ -119,8 +135,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     router.push('/login');
   };
 
+  const updateUser = (updatedUser: User) => {
+    localStorage.setItem('mxv_user', JSON.stringify(updatedUser));
+    setUser(updatedUser);
+  };
+
   return (
-    <AuthContext.Provider value={{ user, token, loading, login, loginSSO, logout }}>
+    <AuthContext.Provider value={{ user, token, loading, login, loginSSO, logout, updateUser }}>
       {children}
     </AuthContext.Provider>
   );

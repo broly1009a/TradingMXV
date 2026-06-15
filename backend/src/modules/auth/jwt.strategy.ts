@@ -18,7 +18,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   }
 
   async validate(payload: any) {
-    const user = await this.userModel.findById(payload.sub).populate('departmentId').exec();
+    const user = await this.userModel.findById(payload.sub).populate('departmentId').populate('divisionId').exec();
     if (!user) {
       throw new UnauthorizedException('User no longer exists');
     }

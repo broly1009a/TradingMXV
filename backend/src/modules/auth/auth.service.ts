@@ -15,6 +15,9 @@ export class AuthService {
   async validateUser(username: string, pass: string): Promise<any> {
     const user = await this.userModel.findOne({ username }).populate('departmentId').exec();
     if (user && (await bcrypt.compare(pass, user.passwordHash))) {
+      if (!user.isActive) {
+        throw new UnauthorizedException('Tài khoản của bạn chưa được kích hoạt hoặc đã bị khóa. Vui lòng liên hệ Admin.');
+      }
       return user;
     }
     return null;
@@ -25,7 +28,8 @@ export class AuthService {
       username: user.username, 
       sub: user._id, 
       role: user.role,
-      departmentId: user.departmentId?._id || user.departmentId 
+      departmentId: user.departmentId?._id || user.departmentId || null,
+      divisionId: user.divisionId?._id || user.divisionId || null
     };
     return {
       access_token: this.jwtService.sign(payload),
@@ -34,7 +38,16 @@ export class AuthService {
         username: user.username,
         fullName: user.fullName,
         role: user.role,
-        department: user.departmentId,
+        department: user.departmentId || null,
+        division: user.divisionId || null,
+        isActive: user.isActive,
+        settings: user.settings || {
+          theme: 'dark',
+          autoRefreshInterval: 30,
+          telegramNotifications: true,
+          telegramChatId: '',
+          alertThresholdMinutes: 15
+        },
       },
     };
   }
@@ -49,21 +62,17 @@ export class AuthService {
       username,
       passwordHash,
       fullName,
-      departmentId,
+      departmentId: departmentId || null,
       role,
+      isActive: true, // Manually registered users are active by default
     });
     await created.save();
     return created;
   }
 
-  async validateSSO(email: string, pass: string): Promise<any> {
-    if (!email || !email.endsWith('@mxv.com.vn')) {
-      throw new UnauthorizedException('Email không thuộc tên miền Sở MXV (@mxv.com.vn)');
-    }
-
-    // Simulated AD Password Check
-    if (pass !== 'Mxv@2026') {
-      throw new UnauthorizedException('Mật khẩu Active Directory không khớp');
+  async validateMicrosoftSSO(email: string, fullName: string): Promise<any> {
+    if (!email || !email.endsWith('@mxv.vn')) {
+      throw new UnauthorizedException('Email không thuộc tên miền Sở MXV (@mxv.vn)');
     }
 
     const username = email.split('@')[0];
@@ -71,39 +80,67 @@ export class AuthService {
     // Check if user already exists
     let user = await this.userModel.findOne({ username }).populate('departmentId').exec();
     
-    if (!user) {
-      // Dynamic provisioning: Find appropriate department
-      const DepartmentModel = this.userModel.db.model('Department');
-      let dept = null;
-      
-      if (username.includes('it')) {
-        dept = await DepartmentModel.findOne({ code: 'IT_CORE' }).exec();
-      } else if (username.includes('ops') || username.includes('re')) {
-        dept = await DepartmentModel.findOne({ code: 'RE_OPS' }).exec();
-      } else if (username.includes('surv') || username.includes('gs')) {
-        dept = await DepartmentModel.findOne({ code: 'MARKET_SURV' }).exec();
+    if (user) {
+      // User exists - check activation status
+      if (!user.isActive) {
+        throw new UnauthorizedException('Tài khoản của bạn đang chờ Admin kích hoạt và gán phòng ban.');
       }
-      
-      // Fallback to first department
-      if (!dept) {
-        dept = await DepartmentModel.findOne().exec();
-      }
-
-      const dummyHash = await bcrypt.hash('dummy_sso_pass_2026', 10);
-      const isInitialAdmin = username === 'admin_sso';
-      
-      const newUser = new this.userModel({
-        username,
-        passwordHash: dummyHash,
-        fullName: `${username.charAt(0).toUpperCase() + username.slice(1)} (SSO)`,
-        departmentId: dept ? dept._id : null,
-        role: isInitialAdmin ? 'ADMIN' : 'STAFF',
-      });
-      
-      const saved = await newUser.save();
-      user = await this.userModel.findById(saved._id).populate('departmentId').exec();
+      return user;
     }
     
-    return user;
+    // User does not exist - create automatically in pending status
+    const dummyHash = await bcrypt.hash('dummy_sso_pass_2026', 10);
+    const isInitialAdmin = username === 'admin_sso';
+    
+    const newUser = new this.userModel({
+      username,
+      passwordHash: dummyHash,
+      fullName: fullName || `${username.charAt(0).toUpperCase() + username.slice(1)} (M365)`,
+      departmentId: null, // Waiting for admin assignment
+      role: isInitialAdmin ? 'ADMIN' : 'STAFF',
+      isActive: isInitialAdmin ? true : false, // Initial admin is active, others wait for admin approval
+    });
+    
+    await newUser.save();
+    
+    throw new UnauthorizedException('Tài khoản đã được tạo tự động từ Microsoft 365 và đang chờ Admin kích hoạt, gán phòng ban.');
+  }
+
+  async updateProfile(userId: string, data: any): Promise<any> {
+    const user = await this.userModel.findById(userId).exec();
+    if (!user) {
+      throw new UnauthorizedException('Không tìm thấy tài khoản');
+    }
+
+    if (data.fullName) {
+      user.fullName = data.fullName;
+    }
+
+    if (data.password) {
+      user.passwordHash = await bcrypt.hash(data.password, 10);
+    }
+
+    if (data.settings) {
+      user.settings = {
+        theme: data.settings.theme !== undefined ? data.settings.theme : user.settings?.theme || 'dark',
+        autoRefreshInterval: data.settings.autoRefreshInterval !== undefined ? Number(data.settings.autoRefreshInterval) : user.settings?.autoRefreshInterval || 30,
+        telegramNotifications: data.settings.telegramNotifications !== undefined ? !!data.settings.telegramNotifications : user.settings?.telegramNotifications ?? true,
+        telegramChatId: data.settings.telegramChatId !== undefined ? data.settings.telegramChatId : user.settings?.telegramChatId || '',
+        alertThresholdMinutes: data.settings.alertThresholdMinutes !== undefined ? Number(data.settings.alertThresholdMinutes) : user.settings?.alertThresholdMinutes || 15,
+      };
+    }
+
+    await user.save();
+    
+    return {
+      id: user._id,
+      username: user.username,
+      fullName: user.fullName,
+      role: user.role,
+      departmentId: user.departmentId || null,
+      divisionId: user.divisionId || null,
+      isActive: user.isActive,
+      settings: user.settings,
+    };
   }
 }
